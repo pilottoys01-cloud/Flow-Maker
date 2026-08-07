@@ -1,0 +1,6 @@
+{
+  "name": "Flow Maker",
+  "description": "2D Game Engine and Visual Blueprint Logic Creator for Android with JSON import/export and ZIP code generator.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
