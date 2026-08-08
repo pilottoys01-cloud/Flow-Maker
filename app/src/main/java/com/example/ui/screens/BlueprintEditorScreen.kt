@@ -26,12 +26,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.runtime.Composable
@@ -130,6 +132,7 @@ fun DraggableBlueprintNode(
     connectingPortNodeId: String?,
     panX: Float,
     panY: Float,
+    zoomScale: Float = 1.0f,
     allObjectsInScene: List<GameObject> = emptyList(),
     allScenesInProject: List<com.example.model.GameScene> = emptyList(),
     onSelectNode: () -> Unit,
@@ -173,6 +176,17 @@ fun DraggableBlueprintNode(
 
     val soundOptions = listOf("COIN", "JUMP", "SHOOT", "LASER", "WIN", "HIT", "EXPLOSION", "MUSIC", "MELODY")
     val spriteOptions = listOf("BOX", "PLAYER", "ENEMY", "PLATFORM", "COIN", "SPACESHIP", "HEART", "BULLET")
+    val animOptions = remember(allObjectsInScene, node) {
+        val list = mutableListOf("Walk", "Run", "Jump", "Idle", "Attack", "Death", "Shoot")
+        allObjectsInScene.forEach { obj ->
+            obj.animations.forEach { anim ->
+                if (anim.name.isNotEmpty() && !list.contains(anim.name)) {
+                    list.add(anim.name)
+                }
+            }
+        }
+        list
+    }
 
     LaunchedEffect(node.x, node.y) {
         if (!isDragging) {
@@ -185,15 +199,15 @@ fun DraggableBlueprintNode(
 
     Box(
         modifier = Modifier
-            .offset { IntOffset((panX + posX).roundToInt(), (panY + posY).roundToInt()) }
-            .width(180.dp)
+            .offset { IntOffset(((panX + posX) * zoomScale).roundToInt(), ((panY + posY) * zoomScale).roundToInt()) }
+            .width((180 * zoomScale).dp)
             .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
             .border(
                 width = if (isSelected || isWiringSource) 3.dp else 2.dp,
                 color = if (isWiringSource) Color.Red else if (isSelected) Color.Yellow else Color.Black,
                 shape = RoundedCornerShape(8.dp)
             )
-            .pointerInput(node.id) {
+            .pointerInput(node.id, zoomScale) {
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
@@ -205,8 +219,8 @@ fun DraggableBlueprintNode(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        posX += dragAmount.x
-                        posY += dragAmount.y
+                        posX += dragAmount.x / zoomScale
+                        posY += dragAmount.y / zoomScale
                         node.x = posX
                         node.y = posY
                     },
@@ -320,6 +334,17 @@ fun DraggableBlueprintNode(
                                 }
                             )
                         }
+                        "animName" -> {
+                            DropdownFieldSelector(
+                                label = "🎬 animName (Nombre Animación)",
+                                value = paramVal,
+                                options = animOptions,
+                                onValueChange = { newVal ->
+                                    node.params[paramKey] = newVal
+                                    onSaveLogic()
+                                }
+                            )
+                        }
                         else -> {
                             var paramTextState by remember(node.id, paramKey) { mutableStateOf(paramVal) }
                             OutlinedTextField(
@@ -391,6 +416,10 @@ fun BlueprintEditorScreen(
     var connectingPortNodeId by remember { mutableStateOf<String?>(null) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
+    var customCategories by remember { mutableStateOf(mutableListOf<String>()) }
+    var showAddCategoryDialog by remember { mutableStateOf(false) }
+    var newCatName by remember { mutableStateOf("") }
 
     val nodes = gameObject.blueprintNodes
     val connections = gameObject.blueprintConnections
@@ -405,6 +434,17 @@ fun BlueprintEditorScreen(
             Triple("ON CLICK / TOUCH", "ON_CLICK", mutableMapOf<String, String>()),
             Triple("ON COLLISION WITH", "ON_COLLISION", mutableMapOf("targetTag" to "Enemy")),
             Triple("PLAY RETRO SOUND", "PLAY_SOUND", mutableMapOf("soundType" to "COIN"))
+        )
+        NodeCategory.ESTADOS -> listOf(
+            Triple("EJECUTAR ANIMACIÓN", "PLAY_ANIMATION", mutableMapOf("animName" to "Walk")),
+            Triple("AL CORRER", "ON_RUN", mutableMapOf<String, String>()),
+            Triple("AL SALTAR", "ON_JUMP", mutableMapOf<String, String>()),
+            Triple("AL ATACAR", "ON_ATTACK", mutableMapOf<String, String>()),
+            Triple("AL ESTAR QUIETO", "ON_IDLE", mutableMapOf<String, String>())
+        )
+        NodeCategory.CONTROL -> listOf(
+            Triple("EJECUTAR ANIMACIÓN", "PLAY_ANIMATION", mutableMapOf("animName" to "Walk")),
+            Triple("ESPERAR X SEGUNDOS", "WAIT", mutableMapOf("seconds" to "1.0"))
         )
         NodeCategory.MOVE -> listOf(
             Triple("MOVE X/Y", "MOVE_XY", mutableMapOf("dx" to "10", "dy" to "0")),
@@ -436,7 +476,7 @@ fun BlueprintEditorScreen(
             Triple("PLAY BG MUSIC", "PLAY_SOUND", mutableMapOf("soundType" to "MUSIC"))
         )
         else -> listOf(
-            Triple("GENERIC ACTION", "MOVE_XY", mutableMapOf("dx" to "5"))
+            Triple("ACCIÓN PERSONALIZADA", "MOVE_XY", mutableMapOf("dx" to "10"))
         )
     }
 
@@ -470,7 +510,42 @@ fun BlueprintEditorScreen(
                 )
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // Zoom controls for Blueprint Editor
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Button(
+                    onClick = { zoomScale = (zoomScale - 0.15f).coerceAtLeast(0.4f) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text("-", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                Text(
+                    text = "${(zoomScale * 100).roundToInt()}%",
+                    color = Color.Cyan,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 4.dp)
+                )
+
+                Button(
+                    onClick = { zoomScale = (zoomScale + 0.15f).coerceAtMost(2.5f) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text("+", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = { zoomScale = 1.0f; panX = 0f; panY = 0f },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF475569)),
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text("100%", color = Color.White, fontSize = 10.sp)
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
                 if (selectedNodeId != null) {
                     IconButton(onClick = {
                         val selId = selectedNodeId
@@ -512,15 +587,15 @@ fun BlueprintEditorScreen(
                     .background(Color(0xFF1E293B))
                     .border(1.dp, Color.Black)
             ) {
-                // Category list buttons
-                Column(
+                // Category list buttons (scrollable column)
+                LazyColumn(
                     modifier = Modifier
-                        .width(90.dp)
+                        .width(95.dp)
                         .fillMaxHeight()
                         .background(Color(0xFF0F172A)),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    NodeCategory.values().forEach { cat ->
+                    items(NodeCategory.values()) { cat ->
                         val catColor = try { Color(android.graphics.Color.parseColor(cat.colorHex)) } catch (e: Exception) { Color.Gray }
                         Box(
                             modifier = Modifier
@@ -536,6 +611,25 @@ fun BlueprintEditorScreen(
                                 fontWeight = FontWeight.Black,
                                 fontSize = 11.sp,
                                 color = if (selectedCategory == cat) Color.Black else Color.White
+                            )
+                        }
+                    }
+
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .background(Color(0xFF059669))
+                                .clickable { showAddCategoryDialog = true }
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "+ NUEVA",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 11.sp,
+                                color = Color.White
                             )
                         }
                     }
@@ -620,24 +714,24 @@ fun BlueprintEditorScreen(
                         val fromNode = nodes.find { it.id == conn.fromNodeId }
                         val toNode = nodes.find { it.id == conn.toNodeId }
                         if (fromNode != null && toNode != null) {
-                            val startX = panX + fromNode.x + 180f
-                            val startY = panY + fromNode.y + 40f
-                            val endX = panX + toNode.x
-                            val endY = panY + toNode.y + 40f
+                            val startX = (panX + fromNode.x + 180f) * zoomScale
+                            val startY = (panY + fromNode.y + 40f) * zoomScale
+                            val endX = (panX + toNode.x) * zoomScale
+                            val endY = (panY + toNode.y + 40f) * zoomScale
 
                             // Draw red wire curve matching wireframe #2
                             val path = Path().apply {
                                 moveTo(startX, startY)
                                 cubicTo(
-                                    startX + 60f, startY,
-                                    endX - 60f, endY,
+                                    startX + 60f * zoomScale, startY,
+                                    endX - 60f * zoomScale, endY,
                                     endX, endY
                                 )
                             }
                             drawPath(
                                 path = path,
                                 color = Color(0xFFEF4444), // Red cable wire
-                                style = Stroke(width = 6f)
+                                style = Stroke(width = 6f * zoomScale)
                             )
                         }
                     }
@@ -652,6 +746,7 @@ fun BlueprintEditorScreen(
                         connectingPortNodeId = connectingPortNodeId,
                         panX = panX,
                         panY = panY,
+                        zoomScale = zoomScale,
                         allObjectsInScene = allObjectsInScene,
                         allScenesInProject = allScenesInProject,
                         onSelectNode = { selectedNodeId = node.id },
@@ -673,7 +768,7 @@ fun BlueprintEditorScreen(
                 }
 
                 // Reset / Recenter Camera view overlay button
-                if (panX != 0f || panY != 0f) {
+                if (panX != 0f || panY != 0f || zoomScale != 1.0f) {
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -682,13 +777,51 @@ fun BlueprintEditorScreen(
                             .clickable {
                                 panX = 0f
                                 panY = 0f
+                                zoomScale = 1.0f
                             }
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
-                        Text("🎯 Recenter View", color = Color.Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text("🎯 Reset View", color = Color.Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
         }
+    }
+
+    if (showAddCategoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddCategoryDialog = false },
+            title = { Text("Añadir Categoría de Bloques", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("Nombre de la nueva categoría:")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newCatName,
+                        onValueChange = { newCatName = it },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newCatName.isNotBlank()) {
+                            customCategories.add(newCatName.trim().uppercase())
+                            newCatName = ""
+                            showAddCategoryDialog = false
+                        }
+                    }
+                ) {
+                    Text("Añadir")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddCategoryDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
     }
 }

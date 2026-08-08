@@ -24,6 +24,7 @@ import com.example.model.GameScene
 import com.example.model.GameUIButton
 import com.example.model.SampleProjects
 import com.example.repository.ProjectRepository
+import com.example.ui.screens.AnimationEditorScreen
 import com.example.ui.screens.BlueprintEditorScreen
 import com.example.ui.screens.ExportDialog
 import com.example.ui.screens.HomeScreen
@@ -35,6 +36,7 @@ enum class ScreenState {
     HOME,
     SCENE_EDITOR,
     BLUEPRINT_EDITOR,
+    ANIMATION_EDITOR,
     PLAY
 }
 
@@ -76,6 +78,7 @@ fun FlowMakerApp() {
     var selectedObjectId by remember { mutableStateOf<String?>(null) }
     var selectedButtonId by remember { mutableStateOf<String?>(null) }
     var blueprintTargetObject by remember { mutableStateOf<GameObject?>(null) }
+    var animationTargetObject by remember { mutableStateOf<GameObject?>(null) }
     var showExportDialog by remember { mutableStateOf(false) }
 
     val currentScene = activeProject?.scenes?.find { it.id == activeSceneId }
@@ -207,6 +210,10 @@ fun FlowMakerApp() {
                         onOpenButtonBlueprint = {
                             // UI Button logic if needed
                         },
+                        onOpenAnimationEditor = { obj ->
+                            animationTargetObject = obj
+                            currentScreen = ScreenState.ANIMATION_EDITOR
+                        },
                         onPlayTest = {
                             currentScreen = ScreenState.PLAY
                         },
@@ -265,6 +272,22 @@ fun FlowMakerApp() {
                             currentScreen = ScreenState.SCENE_EDITOR
                         },
                         onSaveLogic = {
+                            saveProjectsState()
+                        }
+                    )
+                }
+            }
+
+            ScreenState.ANIMATION_EDITOR -> {
+                if (animationTargetObject != null && activeProject != null) {
+                    AnimationEditorScreen(
+                        project = activeProject!!,
+                        gameObject = animationTargetObject!!,
+                        onBack = {
+                            saveProjectsState()
+                            currentScreen = ScreenState.SCENE_EDITOR
+                        },
+                        onSave = { updatedObj ->
                             saveProjectsState()
                         }
                     )

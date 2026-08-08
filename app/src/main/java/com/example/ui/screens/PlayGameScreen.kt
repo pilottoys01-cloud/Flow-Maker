@@ -108,9 +108,17 @@ fun PlayGameScreen(
                         .size(obj.width.dp, obj.height.dp)
                         .clickable { engine.triggerObjectTouch(obj) }
                 ) {
+                    val currentFrame = if (!obj.currentAnimationName.isNullOrEmpty()) {
+                        val anim = obj.animations.find { it.name.equals(obj.currentAnimationName, ignoreCase = true) } ?: obj.animations.firstOrNull()
+                        anim?.frames?.getOrNull(obj.currentFrameIndex)
+                    } else null
+
+                    val preset = currentFrame?.customSpritePreset ?: obj.spritePreset
+                    val imageUri = currentFrame?.customImageUri ?: obj.imageUri
+
                     SpriteRenderer(
-                        preset = obj.spritePreset,
-                        imageUri = obj.imageUri,
+                        preset = preset,
+                        imageUri = imageUri,
                         colorHex = obj.colorHex,
                         modifier = Modifier.fillMaxSize()
                     )

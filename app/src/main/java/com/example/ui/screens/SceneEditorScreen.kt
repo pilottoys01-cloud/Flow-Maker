@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.AlertDialog
@@ -77,6 +78,7 @@ fun DraggableGameObject(
     isSelected: Boolean,
     panX: Float,
     panY: Float,
+    zoomScale: Float = 1.0f,
     onSelect: () -> Unit,
     onUpdate: (GameObject) -> Unit
 ) {
@@ -92,19 +94,19 @@ fun DraggableGameObject(
         }
     }
 
-    val offsetXPx = with(density) { (panX + posX).dp.roundToPx() }
-    val offsetYPx = with(density) { (panY + posY).dp.roundToPx() }
+    val offsetXPx = with(density) { ((panX + posX) * zoomScale).dp.roundToPx() }
+    val offsetYPx = with(density) { ((panY + posY) * zoomScale).dp.roundToPx() }
 
     Box(
         modifier = Modifier
             .offset { IntOffset(offsetXPx, offsetYPx) }
-            .size(obj.width.dp, obj.height.dp)
+            .size((obj.width * zoomScale).dp, (obj.height * zoomScale).dp)
             .border(
                 width = if (isSelected) 3.dp else if (obj.isSolid) 2.dp else 1.dp,
                 color = if (isSelected) Color.Cyan else if (obj.isSolid) Color(0xFF34D399) else Color.White.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(4.dp)
             )
-            .pointerInput(obj.id, density) {
+            .pointerInput(obj.id, density, zoomScale) {
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
@@ -112,8 +114,8 @@ fun DraggableGameObject(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        posX += dragAmount.x / density.density
-                        posY += dragAmount.y / density.density
+                        posX += (dragAmount.x / density.density) / zoomScale
+                        posY += (dragAmount.y / density.density) / zoomScale
                         obj.x = posX
                         obj.y = posY
                     },
@@ -250,6 +252,7 @@ fun SceneEditorScreen(
     onDeleteUIButton: (String) -> Unit,
     onOpenBlueprint: (GameObject) -> Unit,
     onOpenButtonBlueprint: (GameUIButton) -> Unit,
+    onOpenAnimationEditor: (GameObject) -> Unit = {},
     onPlayTest: () -> Unit,
     onOpenExport: () -> Unit,
     onSwitchScene: (String) -> Unit,
@@ -262,10 +265,12 @@ fun SceneEditorScreen(
     var showGrid by remember { mutableStateOf(true) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
+    var zoomScale by remember { mutableFloatStateOf(1.0f) }
     var sceneDropdownExpanded by remember { mutableStateOf(false) }
     var showNewSceneDialog by remember { mutableStateOf(false) }
     var newSceneName by remember { mutableStateOf("") }
     var showAddVarDialog by remember { mutableStateOf(false) }
+    var showMediaLibraryDialog by remember { mutableStateOf(false) }
     var newVarName by remember { mutableStateOf("") }
     var newVarValue by remember { mutableStateOf("0") }
 
@@ -383,7 +388,33 @@ fun SceneEditorScreen(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Button(
+                        onClick = { zoomScale = (zoomScale - 0.15f).coerceAtLeast(0.4f) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("-", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
+                    Text(
+                        text = "${(zoomScale * 100).roundToInt()}%",
+                        color = Color.Cyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 2.dp)
+                    )
+
+                    Button(
+                        onClick = { zoomScale = (zoomScale + 0.15f).coerceAtMost(2.5f) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                        shape = RoundedCornerShape(4.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
+                        Text("+", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+
                     // Grid toggle
                     IconButton(onClick = { showGrid = !showGrid }) {
                         Icon(
@@ -393,7 +424,23 @@ fun SceneEditorScreen(
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+
+                    // MEDIOS / ASSETS button
+                    Button(
+                        onClick = { showMediaLibraryDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0EA5E9)),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier
+                            .height(38.dp)
+                            .testTag("open_media_library_button")
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = "Medios", tint = Color.White)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("MEDIOS", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     // EXPORT GAME button matching wireframe #1 & wireframe #4 export launcher
                     Button(
@@ -434,7 +481,7 @@ fun SceneEditorScreen(
                 Canvas(modifier = Modifier.fillMaxSize()) {
                     drawRect(canvasBg)
                     if (showGrid) {
-                        val gridSize = 40f
+                        val gridSize = 40f * zoomScale
                         val startX = (panX % gridSize)
                         val startY = (panY % gridSize)
                         var x = startX
@@ -457,6 +504,7 @@ fun SceneEditorScreen(
                         isSelected = (obj.id == selectedObjectId),
                         panX = panX,
                         panY = panY,
+                        zoomScale = zoomScale,
                         onSelect = {
                             onSelectObject(obj.id)
                             onSelectButton(null)
@@ -651,14 +699,26 @@ fun SceneEditorScreen(
                             modifier = Modifier.size(50.dp)
                         )
                         Spacer(modifier = Modifier.height(6.dp))
-                        Button(
-                            onClick = { imagePicker.launch("image/*") },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
-                            modifier = Modifier
-                                .height(32.dp)
-                                .testTag("import_image_button")
-                        ) {
-                            Text("IMPORT IMAGE", fontSize = 10.sp, color = Color.Cyan)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Button(
+                                onClick = { imagePicker.launch("image/*") },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF334155)),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("import_image_button")
+                            ) {
+                                Text("IMPORTAR", fontSize = 10.sp, color = Color.Cyan)
+                            }
+
+                            Button(
+                                onClick = { showMediaLibraryDialog = true },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0EA5E9)),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("select_from_media_library_button")
+                            ) {
+                                Text("📁 MEDIOS", fontSize = 10.sp, color = Color.White)
+                            }
                         }
                     }
                 }
@@ -807,6 +867,40 @@ fun SceneEditorScreen(
                     }
                 }
 
+                // Animation Editor Button
+                Button(
+                    onClick = { onOpenAnimationEditor(activeObject) },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("open_animation_editor_button")
+                ) {
+                    Text("🎬 EDITAR ANIMACIONES", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+
+                // Clone Object Button (clones object with same name and tag)
+                Button(
+                    onClick = {
+                        val cloned = activeObject.copy(
+                            id = java.util.UUID.randomUUID().toString(),
+                            name = activeObject.name,
+                            tag = activeObject.tag,
+                            x = activeObject.x + 25f,
+                            y = activeObject.y + 25f
+                        )
+                        currentScene.objects.add(cloned)
+                        onSelectObject(cloned.id)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                    shape = RoundedCornerShape(6.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("clone_object_button")
+                ) {
+                    Text("📋 CLONAR OBJETO", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+
                 // Delete Object Button
                 Button(
                     onClick = { onDeleteObject(activeObject.id) },
@@ -940,6 +1034,27 @@ fun SceneEditorScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showNewSceneDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Media Library Dialog
+    if (showMediaLibraryDialog) {
+        MediaLibraryDialog(
+            project = project,
+            activeObject = activeObject,
+            onDismiss = { showMediaLibraryDialog = false },
+            onSelectAssetForObject = { asset ->
+                if (activeObject != null) {
+                    activeObject.imageUri = asset.uri
+                    activeObject.spritePreset = "CUSTOM_IMAGE"
+                    onUpdateObject(activeObject)
+                }
+            },
+            onProjectUpdated = {
+                if (activeObject != null) {
+                    onUpdateObject(activeObject)
+                }
             }
         )
     }

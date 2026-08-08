@@ -117,10 +117,10 @@ fun ExportDialog(
                     modifier = Modifier.padding(bottom = 4.dp)
                 )
 
-                // ANDROID ZIP - SELECT FOLDER BUTTON
+                // HTML GAME ZIP - SELECT FOLDER BUTTON
                 Button(
                     onClick = {
-                        val fileName = "${project.name.lowercase().replace(" ", "_")}_android.zip"
+                        val fileName = "${project.name.lowercase().replace(" ", "_")}_html5.zip"
                         createZipLauncher.launch(fileName)
                     },
                     shape = RoundedCornerShape(8.dp),
@@ -134,8 +134,8 @@ fun ExportDialog(
                     Icon(Icons.Default.Folder, contentDescription = null, tint = Color.White)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "GUARDAR ZIP EN CARPETA",
-                        fontSize = 15.sp,
+                        text = "GUARDAR ZIP HTML (JUEGO WEB)",
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White
                     )

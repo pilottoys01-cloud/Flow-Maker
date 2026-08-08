@@ -94,7 +94,8 @@ class RuntimeObject(
     var tag: String,
     val variables: MutableMap<String, String> = mutableMapOf(),
     val blueprintNodes: List<BlueprintNode> = emptyList(),
-    val blueprintConnections: List<com.example.model.BlueprintConnection> = emptyList()
+    val blueprintConnections: List<com.example.model.BlueprintConnection> = emptyList(),
+    val animations: List<com.example.model.GameAnimation> = emptyList()
 ) {
     var x by mutableStateOf(x)
     var y by mutableStateOf(y)
@@ -105,6 +106,9 @@ class RuntimeObject(
     var parentTag by mutableStateOf<String?>(null)
     var parentOffsetX by mutableStateOf(0f)
     var parentOffsetY by mutableStateOf(0f)
+    var currentAnimationName by mutableStateOf<String?>(null)
+    var currentFrameIndex by mutableStateOf(0)
+    var animFrameTimerMs by mutableStateOf(0L)
 }
 
 class GameEngine {
@@ -160,9 +164,11 @@ class GameEngine {
                 isSolid = obj.isSolid,
                 tag = obj.tag,
                 blueprintNodes = obj.blueprintNodes.toList(),
-                blueprintConnections = obj.blueprintConnections.toList()
+                blueprintConnections = obj.blueprintConnections.toList(),
+                animations = obj.animations.toList()
             ).apply {
                 parentTag = obj.parentTag
+                currentAnimationName = obj.currentAnimationName
             }
             obj.variables.forEach { v ->
                 rObj.variables[v.name] = v.value
@@ -262,6 +268,30 @@ class GameEngine {
         if (!isInitialized) return
 
         val dt = deltaSeconds.coerceIn(0.001f, 0.05f)
+
+        // Advance animation frame playback for runtime objects
+        val deltaMs = (dt * 1000f).toLong()
+        runtimeObjects.toList().forEach { rObj ->
+            val animName = rObj.currentAnimationName
+            if (!animName.isNullOrEmpty() && rObj.animations.isNotEmpty()) {
+                val anim = rObj.animations.find { it.name.equals(animName, ignoreCase = true) } ?: rObj.animations.firstOrNull()
+                if (anim != null && anim.frames.isNotEmpty()) {
+                    rObj.animFrameTimerMs += deltaMs
+                    val currentFrame = anim.frames.getOrNull(rObj.currentFrameIndex) ?: anim.frames.first()
+                    if (rObj.animFrameTimerMs >= currentFrame.durationMs) {
+                        rObj.animFrameTimerMs = 0L
+                        if (rObj.currentFrameIndex + 1 < anim.frames.size) {
+                            rObj.currentFrameIndex++
+                        } else if (anim.isLoop) {
+                            rObj.currentFrameIndex = 0
+                        }
+                    }
+                    val frameNow = anim.frames.getOrNull(rObj.currentFrameIndex) ?: currentFrame
+                    rObj.x += frameNow.dx * dt * 40f
+                    rObj.y += frameNow.dy * dt * 40f
+                }
+            }
+        }
 
         val collidedPairsThisFrame = HashSet<Pair<RuntimeObject, RuntimeObject>>()
 
@@ -535,6 +565,12 @@ class GameEngine {
 
         targets.forEach { targetObj ->
             when (node.actionType) {
+                "PLAY_ANIMATION" -> {
+                    val animName = node.params["animName"] ?: "Walk"
+                    targetObj.currentAnimationName = animName
+                    targetObj.currentFrameIndex = 0
+                    targetObj.animFrameTimerMs = 0L
+                }
                 "MOVE_XY" -> {
                     val dx = node.params["dx"]?.toFloatOrNull() ?: 0f
                     val dy = node.params["dy"]?.toFloatOrNull() ?: 0f

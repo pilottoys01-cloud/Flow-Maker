@@ -9,6 +9,38 @@ enum class ObjectType {
     UI_BUTTON
 }
 
+enum class MediaType {
+    IMAGE,
+    GIF,
+    AUDIO
+}
+
+data class ProjectMediaAsset(
+    val id: String = UUID.randomUUID().toString(),
+    var name: String,
+    var uri: String,
+    var type: MediaType = MediaType.IMAGE,
+    var sizeBytes: Long = 0L
+) {
+    fun toJsonObject(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("uri", uri)
+        put("type", type.name)
+        put("sizeBytes", sizeBytes)
+    }
+
+    companion object {
+        fun fromJsonObject(obj: JSONObject): ProjectMediaAsset = ProjectMediaAsset(
+            id = obj.optString("id", UUID.randomUUID().toString()),
+            name = obj.optString("name", "Asset"),
+            uri = obj.optString("uri", ""),
+            type = try { MediaType.valueOf(obj.optString("type", "IMAGE")) } catch (e: Exception) { MediaType.IMAGE },
+            sizeBytes = obj.optLong("sizeBytes", 0L)
+        )
+    }
+}
+
 enum class NodeCategory(val displayName: String, val colorHex: String) {
     MOVE("MOVE", "#2196F3"),
     EVENT("EVENT", "#FFEB3B"),
@@ -19,7 +51,10 @@ enum class NodeCategory(val displayName: String, val colorHex: String) {
     RPG("RPG", "#FF9800"),
     SHOOT("SHOOT", "#00BCD4"),
     INPUT("INPUT", "#7C4DFF"),
-    SCENE("SCENE", "#607D8B")
+    SCENE("SCENE", "#607D8B"),
+    ESTADOS("ESTADOS", "#EC4899"),
+    CONTROL("CONTROL", "#F59E0B"),
+    CUSTOM("CUSTOM", "#10B981")
 }
 
 data class GameVariable(
@@ -114,6 +149,74 @@ data class BlueprintNode(
     }
 }
 
+data class AnimationFrame(
+    val id: String = UUID.randomUUID().toString(),
+    var dx: Float = 0f,
+    var dy: Float = 0f,
+    var durationMs: Long = 200L,
+    var scale: Float = 1f,
+    var centerCollision: Boolean = true,
+    var customImageUri: String? = null,
+    var customSpritePreset: String? = null
+) {
+    fun toJsonObject(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("dx", dx.toDouble())
+        put("dy", dy.toDouble())
+        put("durationMs", durationMs)
+        put("scale", scale.toDouble())
+        put("centerCollision", centerCollision)
+        put("customImageUri", customImageUri ?: "")
+        put("customSpritePreset", customSpritePreset ?: "")
+    }
+
+    companion object {
+        fun fromJsonObject(obj: JSONObject): AnimationFrame = AnimationFrame(
+            id = obj.optString("id", UUID.randomUUID().toString()),
+            dx = obj.optDouble("dx", 0.0).toFloat(),
+            dy = obj.optDouble("dy", 0.0).toFloat(),
+            durationMs = obj.optLong("durationMs", 200L),
+            scale = obj.optDouble("scale", 1.0).toFloat(),
+            centerCollision = obj.optBoolean("centerCollision", true),
+            customImageUri = obj.optString("customImageUri", "").let { if (it.isEmpty()) null else it },
+            customSpritePreset = obj.optString("customSpritePreset", "").let { if (it.isEmpty()) null else it }
+        )
+    }
+}
+
+data class GameAnimation(
+    val id: String = UUID.randomUUID().toString(),
+    var name: String = "Walk",
+    var isLoop: Boolean = true,
+    val frames: MutableList<AnimationFrame> = mutableListOf()
+) {
+    fun toJsonObject(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("isLoop", isLoop)
+        val framesArr = JSONArray()
+        frames.forEach { framesArr.put(it.toJsonObject()) }
+        put("frames", framesArr)
+    }
+
+    companion object {
+        fun fromJsonObject(obj: JSONObject): GameAnimation {
+            val anim = GameAnimation(
+                id = obj.optString("id", UUID.randomUUID().toString()),
+                name = obj.optString("name", "Walk"),
+                isLoop = obj.optBoolean("isLoop", true)
+            )
+            val framesArr = obj.optJSONArray("frames")
+            if (framesArr != null) {
+                for (i in 0 until framesArr.length()) {
+                    anim.frames.add(AnimationFrame.fromJsonObject(framesArr.getJSONObject(i)))
+                }
+            }
+            return anim
+        }
+    }
+}
+
 data class GameObject(
     val id: String = UUID.randomUUID().toString(),
     var name: String,
@@ -132,6 +235,8 @@ data class GameObject(
     var isSolid: Boolean = false,
     var tag: String = "Untagged",
     var parentTag: String? = null,
+    var currentAnimationName: String = "",
+    val animations: MutableList<GameAnimation> = mutableListOf(),
     val variables: MutableList<GameVariable> = mutableListOf(),
     val blueprintNodes: MutableList<BlueprintNode> = mutableListOf(),
     val blueprintConnections: MutableList<BlueprintConnection> = mutableListOf()
@@ -154,6 +259,11 @@ data class GameObject(
         put("isSolid", isSolid)
         put("tag", tag)
         put("parentTag", parentTag ?: "")
+        put("currentAnimationName", currentAnimationName)
+
+        val animArr = JSONArray()
+        animations.forEach { animArr.put(it.toJsonObject()) }
+        put("animations", animArr)
 
         val varsArr = JSONArray()
         variables.forEach { varsArr.put(it.toJsonObject()) }
@@ -187,8 +297,16 @@ data class GameObject(
                 isStatic = obj.optBoolean("isStatic", false),
                 isSolid = obj.optBoolean("isSolid", false),
                 tag = obj.optString("tag", "Untagged"),
-                parentTag = obj.optString("parentTag", "").takeIf { it.isNotEmpty() }
+                parentTag = obj.optString("parentTag", "").takeIf { it.isNotEmpty() },
+                currentAnimationName = obj.optString("currentAnimationName", "")
             )
+
+            val animArr = obj.optJSONArray("animations")
+            if (animArr != null) {
+                for (i in 0 until animArr.length()) {
+                    gameObj.animations.add(GameAnimation.fromJsonObject(animArr.getJSONObject(i)))
+                }
+            }
 
             val varsArr = obj.optJSONArray("variables")
             if (varsArr != null) {
@@ -339,7 +457,8 @@ data class GameProject(
     var lastModified: Long = System.currentTimeMillis(),
     var activeSceneId: String = "",
     val scenes: MutableList<GameScene> = mutableListOf(),
-    val globalVariables: MutableList<GameVariable> = mutableListOf()
+    val globalVariables: MutableList<GameVariable> = mutableListOf(),
+    val mediaAssets: MutableList<ProjectMediaAsset> = mutableListOf()
 ) {
     fun getActiveScene(): GameScene? {
         return scenes.find { it.id == activeSceneId } ?: scenes.firstOrNull()
@@ -358,6 +477,10 @@ data class GameProject(
         val varsArr = JSONArray()
         globalVariables.forEach { varsArr.put(it.toJsonObject()) }
         put("globalVariables", varsArr)
+
+        val mediaArr = JSONArray()
+        mediaAssets.forEach { mediaArr.put(it.toJsonObject()) }
+        put("mediaAssets", mediaArr)
     }
 
     fun toJsonString(indent: Int = 2): String = toJsonObject().toString(indent)
@@ -382,6 +505,13 @@ data class GameProject(
             if (varsArr != null) {
                 for (i in 0 until varsArr.length()) {
                     proj.globalVariables.add(GameVariable.fromJsonObject(varsArr.getJSONObject(i)))
+                }
+            }
+
+            val mediaArr = obj.optJSONArray("mediaAssets")
+            if (mediaArr != null) {
+                for (i in 0 until mediaArr.length()) {
+                    proj.mediaAssets.add(ProjectMediaAsset.fromJsonObject(mediaArr.getJSONObject(i)))
                 }
             }
 

@@ -72,11 +72,24 @@ fun HomeScreen(
     var newProjectName by remember { mutableStateOf("") }
     var jsonInputText by remember { mutableStateOf("") }
 
+    val context = LocalContext.current
     val jsonFilePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
-        uri?.let {
-            // Picked json file
+        uri?.let { fileUri ->
+            try {
+                val content = context.contentResolver.openInputStream(fileUri)?.use { stream ->
+                    stream.bufferedReader(Charsets.UTF_8).readText()
+                }
+                if (!content.isNullOrBlank()) {
+                    onImportJson(content)
+                    showImportJsonDialog = false
+                    android.widget.Toast.makeText(context, "¡Proyecto importado desde archivo JSON!", android.widget.Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                android.widget.Toast.makeText(context, "Error al leer archivo JSON: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -351,16 +364,32 @@ fun HomeScreen(
     if (showImportJsonDialog) {
         AlertDialog(
             onDismissRequest = { showImportJsonDialog = false },
-            title = { Text("Import Game Project JSON") },
+            title = { Text("Importar Proyecto JSON", fontWeight = FontWeight.Bold) },
             text = {
-                Column {
-                    Text("Paste JSON content:")
-                    Spacer(modifier = Modifier.height(8.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = {
+                            jsonFilePicker.launch("*/*")
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp)
+                            .testTag("select_json_file_button")
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, tint = Color.White)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("SELECCIONAR ARCHIVO JSON", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    Text("O pega el texto JSON aquí:", fontSize = 12.sp, color = Color.Gray)
+
                     OutlinedTextField(
                         value = jsonInputText,
                         onValueChange = { jsonInputText = it },
-                        minLines = 4,
-                        maxLines = 6,
+                        minLines = 3,
+                        maxLines = 5,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("json_import_text_input")
@@ -377,12 +406,12 @@ fun HomeScreen(
                     },
                     modifier = Modifier.testTag("confirm_import_json_button")
                 ) {
-                    Text("Import")
+                    Text("Importar")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showImportJsonDialog = false }) {
-                    Text("Cancel")
+                    Text("Cancelar")
                 }
             }
         )
