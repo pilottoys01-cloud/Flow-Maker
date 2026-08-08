@@ -129,7 +129,9 @@ data class GameObject(
     var imageUri: String? = null,
     var hasPhysics: Boolean = false,
     var isStatic: Boolean = false,
+    var isSolid: Boolean = false,
     var tag: String = "Untagged",
+    var parentTag: String? = null,
     val variables: MutableList<GameVariable> = mutableListOf(),
     val blueprintNodes: MutableList<BlueprintNode> = mutableListOf(),
     val blueprintConnections: MutableList<BlueprintConnection> = mutableListOf()
@@ -149,7 +151,9 @@ data class GameObject(
         put("imageUri", imageUri ?: "")
         put("hasPhysics", hasPhysics)
         put("isStatic", isStatic)
+        put("isSolid", isSolid)
         put("tag", tag)
+        put("parentTag", parentTag ?: "")
 
         val varsArr = JSONArray()
         variables.forEach { varsArr.put(it.toJsonObject()) }
@@ -181,7 +185,9 @@ data class GameObject(
                 imageUri = obj.optString("imageUri").takeIf { it.isNotEmpty() },
                 hasPhysics = obj.optBoolean("hasPhysics", false),
                 isStatic = obj.optBoolean("isStatic", false),
-                tag = obj.optString("tag", "Untagged")
+                isSolid = obj.optBoolean("isSolid", false),
+                tag = obj.optString("tag", "Untagged"),
+                parentTag = obj.optString("parentTag", "").takeIf { it.isNotEmpty() }
             )
 
             val varsArr = obj.optJSONArray("variables")

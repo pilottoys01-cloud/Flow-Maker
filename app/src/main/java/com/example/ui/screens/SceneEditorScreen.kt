@@ -80,6 +80,7 @@ fun DraggableGameObject(
     onSelect: () -> Unit,
     onUpdate: (GameObject) -> Unit
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
     var posX by remember(obj.id) { mutableFloatStateOf(obj.x) }
     var posY by remember(obj.id) { mutableFloatStateOf(obj.y) }
     var isDragging by remember { mutableStateOf(false) }
@@ -91,16 +92,19 @@ fun DraggableGameObject(
         }
     }
 
+    val offsetXPx = with(density) { (panX + posX).dp.roundToPx() }
+    val offsetYPx = with(density) { (panY + posY).dp.roundToPx() }
+
     Box(
         modifier = Modifier
-            .offset { IntOffset((panX + posX).roundToInt(), (panY + posY).roundToInt()) }
+            .offset { IntOffset(offsetXPx, offsetYPx) }
             .size(obj.width.dp, obj.height.dp)
             .border(
-                width = if (isSelected) 3.dp else 1.dp,
-                color = if (isSelected) Color.Cyan else Color.White.copy(alpha = 0.4f),
+                width = if (isSelected) 3.dp else if (obj.isSolid) 2.dp else 1.dp,
+                color = if (isSelected) Color.Cyan else if (obj.isSolid) Color(0xFF34D399) else Color.White.copy(alpha = 0.4f),
                 shape = RoundedCornerShape(4.dp)
             )
-            .pointerInput(obj.id) {
+            .pointerInput(obj.id, density) {
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
@@ -108,8 +112,8 @@ fun DraggableGameObject(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        posX += dragAmount.x
-                        posY += dragAmount.y
+                        posX += dragAmount.x / density.density
+                        posY += dragAmount.y / density.density
                         obj.x = posX
                         obj.y = posY
                     },
@@ -138,15 +142,17 @@ fun DraggableGameObject(
             modifier = Modifier.fillMaxSize()
         )
 
-        Text(
-            text = obj.name,
-            fontSize = 10.sp,
-            color = Color.White,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .background(Color.Black.copy(alpha = 0.7f))
-                .padding(horizontal = 4.dp)
-        )
+        if (obj.name.isNotBlank()) {
+            Text(
+                text = obj.name,
+                fontSize = 10.sp,
+                color = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.7f))
+                    .padding(horizontal = 4.dp)
+            )
+        }
     }
 }
 
@@ -159,6 +165,7 @@ fun DraggableUIButton(
     onSelect: () -> Unit,
     onUpdate: (GameUIButton) -> Unit
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
     var posX by remember(btn.id) { mutableFloatStateOf(btn.x) }
     var posY by remember(btn.id) { mutableFloatStateOf(btn.y) }
     var isDragging by remember { mutableStateOf(false) }
@@ -170,9 +177,12 @@ fun DraggableUIButton(
         }
     }
 
+    val offsetXPx = with(density) { (panX + posX).dp.roundToPx() }
+    val offsetYPx = with(density) { (panY + posY).dp.roundToPx() }
+
     Box(
         modifier = Modifier
-            .offset { IntOffset((panX + posX).roundToInt(), (panY + posY).roundToInt()) }
+            .offset { IntOffset(offsetXPx, offsetYPx) }
             .size(btn.width.dp, btn.height.dp)
             .background(
                 color = try { Color(android.graphics.Color.parseColor(btn.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) },
@@ -183,7 +193,7 @@ fun DraggableUIButton(
                 color = if (isSelected) Color.Yellow else Color.Black,
                 shape = RoundedCornerShape(8.dp)
             )
-            .pointerInput(btn.id) {
+            .pointerInput(btn.id, density) {
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
@@ -191,8 +201,8 @@ fun DraggableUIButton(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        posX += dragAmount.x
-                        posY += dragAmount.y
+                        posX += dragAmount.x / density.density
+                        posY += dragAmount.y / density.density
                         btn.x = posX
                         btn.y = posY
                     },
@@ -248,6 +258,7 @@ fun SceneEditorScreen(
     onDeleteScene: (GameScene) -> Unit,
     onBackToHome: () -> Unit
 ) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
     var showGrid by remember { mutableStateOf(true) }
     var panX by remember { mutableFloatStateOf(0f) }
     var panY by remember { mutableFloatStateOf(0f) }
@@ -406,11 +417,11 @@ fun SceneEditorScreen(
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color(0xFF020617))
-                    .pointerInput(Unit) {
+                    .pointerInput(density) {
                         detectDragGestures { change, dragAmount ->
                             change.consume()
-                            panX += dragAmount.x
-                            panY += dragAmount.y
+                            panX += dragAmount.x / density.density
+                            panY += dragAmount.y / density.density
                         }
                     }
                     .clickable {
@@ -545,10 +556,15 @@ fun SceneEditorScreen(
             )
 
             if (activeObject != null) {
+                var nameText by remember(activeObject.id) { mutableStateOf(activeObject.name) }
+                var tagText by remember(activeObject.id) { mutableStateOf(activeObject.tag) }
+                var parentTagText by remember(activeObject.id) { mutableStateOf(activeObject.parentTag ?: "") }
+
                 // Object Header & Name
                 OutlinedTextField(
-                    value = activeObject.name,
+                    value = nameText,
                     onValueChange = {
+                        nameText = it
                         activeObject.name = it
                         onUpdateObject(activeObject)
                     },
@@ -559,12 +575,26 @@ fun SceneEditorScreen(
 
                 // Tag Input
                 OutlinedTextField(
-                    value = activeObject.tag,
+                    value = tagText,
                     onValueChange = {
+                        tagText = it
                         activeObject.tag = it
                         onUpdateObject(activeObject)
                     },
                     label = { Text("Tag (e.g. Player, Platform, Enemy)") },
+                    colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Parent Tag (Objeto Padre a seguir)
+                OutlinedTextField(
+                    value = parentTagText,
+                    onValueChange = {
+                        parentTagText = it
+                        activeObject.parentTag = it.ifBlank { null }
+                        onUpdateObject(activeObject)
+                    },
+                    label = { Text("🔗 Parent Tag (Objeto Padre)") },
                     colors = OutlinedTextFieldDefaults.colors(focusedTextColor = Color.White, unfocusedTextColor = Color.White),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -685,21 +715,43 @@ fun SceneEditorScreen(
                     )
                 }
 
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("🛡️ Colisión Sólida (Pared/Caja):", fontSize = 12.sp, color = Color(0xFF34D399))
+                    Switch(
+                        checked = activeObject.isSolid,
+                        onCheckedChange = {
+                            activeObject.isSolid = it
+                            onUpdateObject(activeObject)
+                        }
+                    )
+                }
+
+                var xText by remember(activeObject.id, activeObject.x) { mutableStateOf(activeObject.x.toInt().toString()) }
+                var yText by remember(activeObject.id, activeObject.y) { mutableStateOf(activeObject.y.toInt().toString()) }
+                var wText by remember(activeObject.id, activeObject.width) { mutableStateOf(activeObject.width.toInt().toString()) }
+                var hText by remember(activeObject.id, activeObject.height) { mutableStateOf(activeObject.height.toInt().toString()) }
+
                 // Position Inputs: X, Y, W, H
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = activeObject.x.toInt().toString(),
+                        value = xText,
                         onValueChange = {
-                            activeObject.x = it.toFloatOrNull() ?: activeObject.x
+                            xText = it
+                            activeObject.x = it.toFloatOrNull() ?: 0f
                             onUpdateObject(activeObject)
                         },
                         label = { Text("X") },
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
-                        value = activeObject.y.toInt().toString(),
+                        value = yText,
                         onValueChange = {
-                            activeObject.y = it.toFloatOrNull() ?: activeObject.y
+                            yText = it
+                            activeObject.y = it.toFloatOrNull() ?: 0f
                             onUpdateObject(activeObject)
                         },
                         label = { Text("Y") },
@@ -709,18 +761,20 @@ fun SceneEditorScreen(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = activeObject.width.toInt().toString(),
+                        value = wText,
                         onValueChange = {
-                            activeObject.width = it.toFloatOrNull() ?: activeObject.width
+                            wText = it
+                            activeObject.width = it.toFloatOrNull() ?: 32f
                             onUpdateObject(activeObject)
                         },
                         label = { Text("Width") },
                         modifier = Modifier.weight(1f)
                     )
                     OutlinedTextField(
-                        value = activeObject.height.toInt().toString(),
+                        value = hText,
                         onValueChange = {
-                            activeObject.height = it.toFloatOrNull() ?: activeObject.height
+                            hText = it
+                            activeObject.height = it.toFloatOrNull() ?: 32f
                             onUpdateObject(activeObject)
                         },
                         label = { Text("Height") },

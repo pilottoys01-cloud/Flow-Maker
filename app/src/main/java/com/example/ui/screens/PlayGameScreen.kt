@@ -6,6 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -68,11 +69,23 @@ fun PlayGameScreen(
     }
 
     // Matching Wireframe #3 Game Viewport
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0F172A))
     ) {
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val wDp = maxWidth.value
+        val hDp = maxHeight.value
+
+        if (wDp > 0f) engine.viewportWidth = wDp
+        if (hDp > 0f) engine.viewportHeight = hDp
+
+        LaunchedEffect(wDp, hDp) {
+            if (wDp > 0f) engine.viewportWidth = wDp
+            if (hDp > 0f) engine.viewportHeight = hDp
+        }
+
         // Game Engine Scene Canvas
         val bgColor = try { Color(android.graphics.Color.parseColor(engine.backgroundColorHex)) } catch (e: Exception) { Color(0xFF0F172A) }
         Box(
@@ -82,9 +95,16 @@ fun PlayGameScreen(
         ) {
             // Render Runtime Game Objects
             engine.runtimeObjects.forEach { obj ->
+                val screenXDp = obj.x + engine.cameraX
+                val screenYDp = obj.y + engine.cameraY
                 Box(
                     modifier = Modifier
-                        .offset { IntOffset((obj.x + engine.cameraX).roundToInt(), (obj.y + engine.cameraY).roundToInt()) }
+                        .offset {
+                            IntOffset(
+                                with(density) { screenXDp.dp.roundToPx() },
+                                with(density) { screenYDp.dp.roundToPx() }
+                            )
+                        }
                         .size(obj.width.dp, obj.height.dp)
                         .clickable { engine.triggerObjectTouch(obj) }
                 ) {
@@ -99,24 +119,34 @@ fun PlayGameScreen(
 
             // Render Runtime UI Buttons on Screen matching Wireframe #3
             engine.runtimeUIButtons.forEach { btn ->
-                Button(
-                    onClick = { engine.triggerUIButton(btn.actionKey) },
-                    shape = RoundedCornerShape(8.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = try { Color(android.graphics.Color.parseColor(btn.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
-                    ),
+                Box(
                     modifier = Modifier
-                        .offset { IntOffset(btn.x.roundToInt(), btn.y.roundToInt()) }
+                        .offset {
+                            IntOffset(
+                                with(density) { btn.x.dp.roundToPx() },
+                                with(density) { btn.y.dp.roundToPx() }
+                            )
+                        }
                         .size(btn.width.dp, btn.height.dp)
-                        .border(2.dp, Color.Black, RoundedCornerShape(8.dp))
-                        .testTag("runtime_ui_btn_${btn.actionKey}")
                 ) {
-                    Text(
-                        text = btn.label,
-                        fontWeight = FontWeight.Black,
-                        fontSize = 14.sp,
-                        color = Color.White
-                    )
+                    Button(
+                        onClick = { engine.triggerUIButton(btn.actionKey) },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = try { Color(android.graphics.Color.parseColor(btn.colorHex)) } catch (e: Exception) { Color(0xFFFF9800) }
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(2.dp, Color.Black, RoundedCornerShape(8.dp))
+                            .testTag("runtime_ui_btn_${btn.actionKey}")
+                    ) {
+                        Text(
+                            text = btn.label,
+                            fontWeight = FontWeight.Black,
+                            fontSize = 14.sp,
+                            color = Color.White
+                        )
+                    }
                 }
             }
         }

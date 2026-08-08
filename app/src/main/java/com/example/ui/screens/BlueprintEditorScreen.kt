@@ -321,9 +321,11 @@ fun DraggableBlueprintNode(
                             )
                         }
                         else -> {
+                            var paramTextState by remember(node.id, paramKey) { mutableStateOf(paramVal) }
                             OutlinedTextField(
-                                value = paramVal,
+                                value = paramTextState,
                                 onValueChange = { newVal ->
+                                    paramTextState = newVal
                                     node.params[paramKey] = newVal
                                     onSaveLogic()
                                 },
@@ -336,26 +338,39 @@ fun DraggableBlueprintNode(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Port Connectors Row (Red dot output wire port)
+                // Port Connectors Row (Green IN wire port & Red OUT wire port)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("IN", fontSize = 9.sp, color = Color.LightGray)
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .clip(CircleShape)
+                            .background(if (connectingPortNodeId != null && connectingPortNodeId != node.id) Color(0xFF10B981) else Color(0xFF475569))
+                            .clickable {
+                                if (connectingPortNodeId != null && connectingPortNodeId != node.id) {
+                                    onConnectNode()
+                                }
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("IN", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    }
 
                     // Wire output dot matching red circle in wireframe #2
                     Box(
                         modifier = Modifier
                             .size(26.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFEF4444))
+                            .background(if (isWiringSource) Color.Yellow else Color(0xFFEF4444))
                             .clickable {
                                 onStartWiring()
                             },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("OUT", fontSize = 8.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("OUT", fontSize = 8.sp, color = if (isWiringSource) Color.Black else Color.White, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -404,7 +419,9 @@ fun BlueprintEditorScreen(
         )
         NodeCategory.SHOOT -> listOf(
             Triple("SHOOT BULLET", "SHOOT_BULLET", mutableMapOf("speed" to "500")),
-            Triple("SPAWN OBJECT", "SPAWN_OBJECT", mutableMapOf("name" to "Coin", "sprite" to "COIN", "dx" to "0", "dy" to "-40")),
+            Triple("SPAWN BOX / OBJECT", "SPAWN_OBJECT", mutableMapOf("name" to "Box", "sprite" to "BOX", "dx" to "0", "dy" to "-40", "count" to "1", "hasPhysics" to "true", "isSolid" to "true")),
+            Triple("SPAWN MULTIPLE BOXES", "SPAWN_OBJECT", mutableMapOf("name" to "Box", "sprite" to "BOX", "dx" to "0", "dy" to "-40", "count" to "3", "hasPhysics" to "true", "isSolid" to "true")),
+            Triple("SPAWN COIN", "SPAWN_OBJECT", mutableMapOf("name" to "Coin", "sprite" to "COIN", "dx" to "0", "dy" to "-40", "count" to "1")),
             Triple("DESTROY SELF", "DESTROY_SELF", mutableMapOf<String, String>())
         )
         NodeCategory.VARI -> listOf(
@@ -544,6 +561,15 @@ fun BlueprintEditorScreen(
                                     params = params.toMutableMap()
                                 )
                                 nodes.add(newNode)
+                                if (connectingPortNodeId != null) {
+                                    connections.add(
+                                        BlueprintConnection(
+                                            fromNodeId = connectingPortNodeId!!,
+                                            toNodeId = newNode.id
+                                        )
+                                    )
+                                    connectingPortNodeId = null
+                                }
                                 onSaveLogic()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2563EB)),

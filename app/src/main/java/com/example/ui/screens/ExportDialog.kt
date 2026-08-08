@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Share
@@ -159,6 +160,70 @@ fun ExportDialog(
                     Text(
                         text = "GUARDAR JSON EN CARPETA",
                         fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White
+                    )
+                }
+
+                // BUILD APK WITH GITHUB ACTIONS (.github/workflows/build.yml)
+                Button(
+                    onClick = {
+                        val buildYml = """
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant Execute Permission for Gradle
+        run: chmod +x gradlew || true
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-app-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+                        """.trimIndent()
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        val clip = ClipData.newPlainText("build.yml", buildYml)
+                        clipboard.setPrimaryClip(clip)
+                        exportStatusText = "¡El archivo .github/workflows/build.yml ya está creado en tu app y copiado al portapapeles!"
+                        Toast.makeText(context, "build.yml copiado al portapapeles!", Toast.LENGTH_SHORT).show()
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF8B5CF6)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .border(2.dp, Color.Black, RoundedCornerShape(8.dp))
+                        .testTag("export_build_yml_button")
+                ) {
+                    Icon(Icons.Default.Build, contentDescription = null, tint = Color.White)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "COPIAR WORKFLOW BUILD.YML (APK)",
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Black,
                         color = Color.White
                     )
